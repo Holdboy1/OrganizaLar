@@ -14,8 +14,10 @@ import { formatBRL, isoToday } from "@/lib/domain/helpers"
 import {
   cupomJaImportado,
   formatarCNPJ,
+  parseDadosTextoCupom,
   parseQRCodeNFCe,
   type CupomFiscalQr,
+  type ItemCupomParseado,
 } from "@/lib/domain/cupom-fiscal"
 import type { FormaPagamento, TipoMercado } from "@/lib/types"
 
@@ -46,6 +48,8 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>("dinheiro")
   const [cartaoId, setCartaoId] = useState("")
   const [obs, setObs] = useState("")
+  const [textoOficial, setTextoOficial] = useState("")
+  const [itensExtraidos, setItensExtraidos] = useState<ItemCupomParseado[]>([])
 
   const estabelecimentoExistente = useMemo(() => {
     if (!cupom?.cnpjEmitente) return null
@@ -70,6 +74,8 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
     setFormaPagamento("dinheiro")
     setCartaoId("")
     setObs("")
+    setTextoOficial("")
+    setItensExtraidos([])
   }, [open, tipoInicial])
 
   const pararScanner = () => {
@@ -156,6 +162,25 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
 
   const processarManual = () => {
     processarConteudo(entradaManual)
+  }
+
+  const extrairTextoOficial = () => {
+    const dados = parseDadosTextoCupom(textoOficial)
+    if (dados.valorTotal) setValor(String(dados.valorTotal))
+    if (dados.formaPagamento) setFormaPagamento(dados.formaPagamento)
+    setItensExtraidos(dados.itens)
+
+    if (!dados.valorTotal && dados.itens.length === 0) {
+      setErro("Nao encontrei valor nem itens nesse texto. Copie o conteudo da pagina oficial depois da consulta.")
+      return
+    }
+
+    setErro("")
+    setObs(prev => {
+      const base = prev || "Cupom fiscal lido por QR Code"
+      if (dados.itens.length === 0) return base
+      return `${base} - ${dados.itens.length} itens extraidos`
+    })
   }
 
   const salvar = () => {
@@ -275,6 +300,13 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
                 {cupom.valorTotal && <p className="text-muted-foreground">Valor no QR: {formatBRL(cupom.valorTotal)}</p>}
               </div>
 
+              {!valor && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-100">
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <p>A chave fiscal nao contem valor nem itens. Abra a consulta oficial, passe pelo captcha e cole o texto aqui para eu preencher automaticamente.</p>
+                </div>
+              )}
+
               {duplicado && (
                 <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
                   <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
@@ -343,6 +375,30 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
                   Abrir consulta oficial
                 </a>
               </Button>
+
+              <div>
+                <Label>Texto da consulta oficial</Label>
+                <Textarea
+                  value={textoOficial}
+                  onChange={e => setTextoOficial(e.target.value)}
+                  rows={5}
+                  placeholder="Depois de abrir a consulta oficial, copie o texto da nota e cole aqui. Eu tento extrair total, pagamento e itens."
+                  className="mt-2"
+                />
+                <Button
+                  variant="outline"
+                  className="mt-2 w-full"
+                  onClick={extrairTextoOficial}
+                  disabled={!textoOficial.trim()}
+                >
+                  Extrair dados do texto
+                </Button>
+                {itensExtraidos.length > 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {itensExtraidos.length} itens encontrados. Na proxima etapa eles vao alimentar a despensa automaticamente.
+                  </p>
+                )}
+              </div>
             </>
           )}
         </div>

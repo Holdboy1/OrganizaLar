@@ -25,6 +25,7 @@ const {
   parseQRCodeNFCe,
   formatarCNPJ,
   cupomJaImportado,
+  parseDadosTextoCupom,
   parseTextoItensCupom,
 } = sandbox.exports
 
@@ -46,6 +47,12 @@ assert(formatarCNPJ(parsed.cnpjEmitente) === "12.345.678/0001-95", "Formatacao C
 const parsedDireto = parseQRCodeNFCe(chavePE)
 assert(parsedDireto?.chaveAcesso === chavePE, "Chave direta deveria ser reconhecida")
 
+const chaveRealUsuario = "26260508071185000137653100001746341310814405"
+const parsedUsuario = parseQRCodeNFCe(chaveRealUsuario)
+assert(parsedUsuario?.chaveAcesso === chaveRealUsuario, "Chave real do usuario deveria ser reconhecida")
+assert(parsedUsuario?.cnpjEmitente === "08071185000137", "CNPJ da chave real do usuario errado")
+assert(parsedUsuario?.valorTotal === null, "Chave pura nao deveria fingir valor total")
+
 const state = { comprasMercado: [{ chaveAcesso: chavePE }] }
 assert(cupomJaImportado(chavePE, state), "Duplicidade deveria ser detectada")
 
@@ -59,5 +66,16 @@ assert(itens.length === 2, "Parser deveria reconhecer 2 itens")
 assert(itens[0].nome === "ARROZ TIPO 1 5KG", "Nome do primeiro item errado")
 assert(itens[0].valorTotal === 28.9, "Valor do primeiro item errado")
 assert(itens[1].quantidade === 2, "Quantidade do segundo item errada")
+
+const dadosTexto = parseDadosTextoCupom(`
+Forma de pagamento: PIX
+ARROZ TIPO 1 5KG    1 UN  R$ 28,90  R$ 28,90
+FEIJAO CARIOCA      2 UN  8,50  17,00
+Valor total R$ 45,90
+`)
+
+assert(dadosTexto.valorTotal === 45.9, "Total do texto oficial deveria ser extraido")
+assert(dadosTexto.formaPagamento === "pix", "Forma de pagamento deveria ser pix")
+assert(dadosTexto.itens.length === 2, "Texto oficial deveria extrair itens")
 
 console.log("OK - cupom fiscal validado")

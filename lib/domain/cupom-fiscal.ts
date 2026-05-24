@@ -20,6 +20,12 @@ export interface ItemCupomParseado {
   valorTotal: number
 }
 
+export interface DadosTextoCupom {
+  valorTotal: number | null
+  formaPagamento: FormaPagamento | null
+  itens: ItemCupomParseado[]
+}
+
 const UNIDADES_VALIDAS = ["un", "kg", "g", "l", "ml", "dz", "pct", "cx", "pc"]
 
 export function parseQRCodeNFCe(conteudo: string): CupomFiscalQr | null {
@@ -90,11 +96,60 @@ export function sugerirFormaPagamento(texto: string): FormaPagamento {
   return "dinheiro"
 }
 
+export function parseDadosTextoCupom(texto: string): DadosTextoCupom {
+  const itens = parseTextoItensCupom(texto)
+  const valorTotal = extrairTotalDoTexto(texto) || somaItens(itens)
+  const formaPagamento = extrairFormaPagamentoDoTexto(texto)
+
+  return {
+    valorTotal: valorTotal && valorTotal > 0 ? valorTotal : null,
+    formaPagamento,
+    itens,
+  }
+}
+
 export function parseTextoItensCupom(texto: string): ItemCupomParseado[] {
   return String(texto || "")
     .split(/\r?\n/)
     .map(linha => parseLinhaItemCupom(linha.trim()))
     .filter((item): item is ItemCupomParseado => Boolean(item))
+}
+
+function extrairTotalDoTexto(texto: string): number | null {
+  const linhas = String(texto || "").split(/\r?\n/).map(linha => linha.trim()).filter(Boolean)
+  const padroes = [
+    /valor\s+total\s+(?:r\$)?\s*([\d.,]+)/i,
+    /total\s+da\s+nota\s+(?:r\$)?\s*([\d.,]+)/i,
+    /valor\s+a\s+pagar\s+(?:r\$)?\s*([\d.,]+)/i,
+    /total\s+(?:r\$)?\s*([\d.,]+)/i,
+  ]
+
+  for (const linha of linhas) {
+    for (const padrao of padroes) {
+      const match = linha.match(padrao)
+      if (match) {
+        const valor = parseValorBR(match[1])
+        if (valor > 0) return valor
+      }
+    }
+  }
+
+  return null
+}
+
+function extrairFormaPagamentoDoTexto(texto: string): FormaPagamento | null {
+  const normalizado = normalizarTexto(texto)
+  if (/\bpix\b/.test(normalizado)) return "pix"
+  if (/\bcredito|cartao credito|cartao de credito\b/.test(normalizado)) return "credito"
+  if (/\bdebito|cartao debito|cartao de debito\b/.test(normalizado)) return "debito"
+  if (/\bdinheiro|especie\b/.test(normalizado)) return "dinheiro"
+  return null
+}
+
+function somaItens(itens: ItemCupomParseado[]): number | null {
+  if (itens.length === 0) return null
+  const total = itens.reduce((soma, item) => soma + item.valorTotal, 0)
+  return Number(total.toFixed(2))
 }
 
 export function parseLinhaItemCupom(linha: string): ItemCupomParseado | null {
