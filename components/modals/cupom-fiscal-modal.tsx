@@ -98,6 +98,7 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
   const [ocrProgresso, setOcrProgresso] = useState(0)
   const [ocrStatus, setOcrStatus] = useState("")
   const [imagemCupom, setImagemCupom] = useState<string | null>(null)
+  const [nomeEmitente, setNomeEmitente] = useState<string | null>(null)
 
   const estabelecimentoExistente = useMemo(() => {
     if (!cupom?.cnpjEmitente) return null
@@ -128,6 +129,7 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
     setOcrProgresso(0)
     setOcrStatus("")
     setImagemCupom(null)
+    setNomeEmitente(null)
   }, [open, tipoInicial])
 
   const pararScanner = () => {
@@ -220,6 +222,7 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
     const dados = parseDadosTextoCupom(textoOficial)
     if (dados.valorTotal) setValor(String(dados.valorTotal))
     if (dados.formaPagamento) setFormaPagamento(dados.formaPagamento)
+    if (dados.emitenteNome) setNomeEmitente(dados.emitenteNome)
     setItensExtraidos(dados.itens)
 
     if (!dados.valorTotal && dados.itens.length === 0) {
@@ -273,6 +276,7 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
       const dados = parseDadosTextoCupom(texto)
       if (dados.valorTotal) setValor(String(dados.valorTotal))
       if (dados.formaPagamento) setFormaPagamento(dados.formaPagamento)
+      if (dados.emitenteNome) setNomeEmitente(dados.emitenteNome)
       setItensExtraidos(dados.itens)
       setObs(prev => {
         const base = prev || "Cupom fiscal lido por imagem"
@@ -338,7 +342,7 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
     let estabelecimentoId = estabelecimentoExistente?.id || null
     if (!estabelecimentoId) {
       const novo = storeActions.addEstabelecimento({
-        nome: `Mercado ${formatarCNPJ(cupom.cnpjEmitente)}`,
+        nome: nomeEmitente || `Mercado ${formatarCNPJ(cupom.cnpjEmitente)}`,
         tipo,
         cnpj: cupom.cnpjEmitente,
         cor: tipo === "mercado" ? "#16a34a" : "#10b981",

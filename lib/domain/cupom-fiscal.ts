@@ -24,6 +24,8 @@ export interface DadosTextoCupom {
   valorTotal: number | null
   formaPagamento: FormaPagamento | null
   itens: ItemCupomParseado[]
+  emitenteNome: string | null
+  cnpjEmitente: string | null
 }
 
 const UNIDADES_VALIDAS = ["un", "kg", "g", "l", "ml", "dz", "pct", "cx", "pc"]
@@ -45,6 +47,10 @@ export function parseQRCodeNFCe(conteudo: string): CupomFiscalQr | null {
   if (!chave) {
     const direta = texto.match(/\b(\d{44})\b/)
     if (direta) chave = direta[1]
+  }
+
+  if (!chave) {
+    chave = extrairChaveEspacada(texto)
   }
 
   if (!chave) return null
@@ -100,19 +106,47 @@ export function parseDadosTextoCupom(texto: string): DadosTextoCupom {
   const itens = parseTextoItensCupom(texto)
   const valorTotal = extrairTotalDoTexto(texto) || somaItens(itens)
   const formaPagamento = extrairFormaPagamentoDoTexto(texto)
+  const emitente = extrairEmitenteDoTexto(texto)
 
   return {
     valorTotal: valorTotal && valorTotal > 0 ? valorTotal : null,
     formaPagamento,
     itens,
+    emitenteNome: emitente.nome,
+    cnpjEmitente: emitente.cnpj,
   }
 }
 
 export function parseTextoItensCupom(texto: string): ItemCupomParseado[] {
-  return String(texto || "")
-    .split(/\r?\n/)
-    .map(linha => parseLinhaItemCupom(linha.trim()))
-    .filter((item): item is ItemCupomParseado => Boolean(item))
+  const linhas = String(texto || "").split(/\r?\n/).map(linha => linha.trim()).filter(Boolean)
+  const itens: ItemCupomParseado[] = []
+
+  for (let i = 0; i < linhas.length; i++) {
+    const atual = linhas[i]
+    const proxima = linhas[i + 1] || ""
+    const terceira = linhas[i + 2] || ""
+
+    const item = parseLinhaItemCupom(atual)
+    if (item) {
+      itens.push(item)
+      continue
+    }
+
+    const itemTresLinhas = parseLinhaItemCupom(`${atual} ${proxima} ${terceira}`.trim())
+    if (itemTresLinhas) {
+      itens.push(itemTresLinhas)
+      i += 2
+      continue
+    }
+
+    const itemDuasLinhas = parseLinhaItemCupom(`${atual} ${proxima}`.trim())
+    if (itemDuasLinhas) {
+      itens.push(itemDuasLinhas)
+      i += 1
+    }
+  }
+
+  return itens
 }
 
 function extrairTotalDoTexto(texto: string): number | null {
@@ -121,6 +155,7 @@ function extrairTotalDoTexto(texto: string): number | null {
     /valor\s+total\s+(?:r\$)?\s*([\d.,]+)/i,
     /total\s+da\s+nota\s+(?:r\$)?\s*([\d.,]+)/i,
     /valor\s+a\s+pagar\s+(?:r\$)?\s*([\d.,]+)/i,
+    /valor\s+a\s+pagar\s*r\$?\s*:?\s*([\d.,]+)/i,
     /total\s+(?:r\$)?\s*([\d.,]+)/i,
   ]
 
@@ -161,6 +196,11 @@ export function parseLinhaItemCupom(linha: string): ItemCupomParseado | null {
   let match = linha.match(/^(.+?)\s+(\d+(?:[.,]\d+)?)\s+(UN|KG|G|L|ML|DZ|PCT|CX|PC)\s+R?\$?\s*([\d.,]+)\s+R?\$?\s*([\d.,]+)\s*$/i)
   if (match) {
     return montarItem(match[1], match[2], match[3], match[4], match[5])
+  }
+
+  match = linha.match(/^(.+?)\s+\(C[oó]digo:\s*\d+\).*?Vl\.\s*Total\s*([\d.,]+).*?Qtde\.:\s*(\d+(?:[.,]\d+)?).*?UN:\s*([A-Z]{1,4})\d*.*?Vl\.\s*Unit\.:\s*([\d.,]+)/i)
+  if (match) {
+    return montarItem(match[1], match[3], match[4], match[5], match[2])
   }
 
   match = linha.match(/^(.+?)\s+(\d+(?:[.,]\d+)?)\s+(UN|KG|G|L|ML|DZ|PCT|CX|PC)\s+R?\$?\s*([\d.,]+)\s*$/i)
@@ -204,6 +244,53 @@ function extrairValorDoQr(texto: string): number | null {
   if (!match) return null
   const valor = parseValorBR(match[1])
   return valor > 0 ? valor : null
+}
+
+function extrairChaveEspacada(texto: string): string | null {
+  const linhas = String(texto || "").split(/\r?\n/)
+  const candidatos: string[] = []
+
+  for (let i = 0; i < linhas.length; i++) {
+    const atual = linhas[i] || ""
+    const proxima = linhas[i + 1] || ""
+    if (/chave\s+de\s+acesso/i.test(atual)) candidatos.push(`${atual} ${proxima}`)
+    candidatos.push(atual)
+  }
+
+  const textoCompleto = String(texto || "")
+  candidatos.push(textoCompleto)
+
+  for (const candidato of candidatos) {
+    const digitos = candidato.replace(/\D/g, "")
+    const match = digitos.match(/26\d{42}/) || digitos.match(/\d{44}/)
+    if (match) return match[0]
+  }
+
+  return null
+}
+
+function extrairEmitenteDoTexto(texto: string): { nome: string | null; cnpj: string | null } {
+  const linhas = String(texto || "").split(/\r?\n/).map(linha => linha.trim()).filter(Boolean)
+  let cnpj: string | null = null
+  let nome: string | null = null
+
+  for (let i = 0; i < linhas.length; i++) {
+    const linha = linhas[i]
+    const cnpjMatch = linha.match(/CNPJ\s*:\s*(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})/i)
+    if (cnpjMatch) {
+      cnpj = cnpjMatch[1].replace(/\D/g, "")
+      for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
+        const candidata = linhas[j]
+        if (/[A-ZÁÉÍÓÚÂÊÔÃÕÇ]{3}/.test(candidata) && !/consulta|filtro|chave|http/i.test(candidata)) {
+          nome = candidata.replace(/\s+/g, " ").trim()
+          break
+        }
+      }
+      break
+    }
+  }
+
+  return { nome, cnpj }
 }
 
 function parseValorBR(valor: string): number {

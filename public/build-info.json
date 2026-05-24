@@ -2,5 +2,5 @@
   "app": "OrganizaLar",
   "channel": "pwa",
   "deployTest": "github-netlify",
-  "version": "2026.05.24.5"
+  "version": "2026.05.24.6"
 }

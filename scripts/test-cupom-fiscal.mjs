@@ -78,4 +78,35 @@ assert(dadosTexto.valorTotal === 45.9, "Total do texto oficial deveria ser extra
 assert(dadosTexto.formaPagamento === "pix", "Forma de pagamento deveria ser pix")
 assert(dadosTexto.itens.length === 2, "Texto oficial deveria extrair itens")
 
+const textoPrintSefaz = `
+A.J.J. EMPRESA DE ALIMENTOS LTDA
+CNPJ: 08.071.185/0001-37
+MOIDA 2 KG KG (Codigo: 2427) Vl. Total
+15,90
+Qtde.: 0,53 UN: KG0001 Vl. Unit.: 30
+CAFE SAO BRAZ ALIMOF FAMILIA 250G (Codigo: 1883) Vl. Total
+14,65
+Qtde.: 1 UN: UN0001 Vl. Unit.: 14,65
+REFR SPRITE PET 250ML (Codigo: 1927) Vl. Total
+1,99
+Qtde.: 1 UN: UN0001 Vl. Unit.: 1,99
+Valor a pagar R$: 38,51
+Forma de pagamento:
+Cartao de Credito
+Chave de acesso:
+2626 0508 0711 8500 0137 6531 0000 1746 3413 1081 4405
+`
+
+const parsedPrint = parseQRCodeNFCe(textoPrintSefaz)
+assert(parsedPrint?.chaveAcesso === chaveRealUsuario, "Chave espacada do print deveria ser reconhecida")
+
+const dadosPrint = parseDadosTextoCupom(textoPrintSefaz)
+assert(dadosPrint.emitenteNome === "A.J.J. EMPRESA DE ALIMENTOS LTDA", "Emitente do print deveria ser reconhecido")
+assert(dadosPrint.cnpjEmitente === "08071185000137", "CNPJ do print deveria ser reconhecido")
+assert(dadosPrint.valorTotal === 38.51, "Valor total do print deveria ser 38,51")
+assert(dadosPrint.formaPagamento === "credito", "Forma de pagamento do print deveria ser credito")
+assert(dadosPrint.itens.length >= 3, "Itens do layout SEFAZ deveriam ser reconhecidos")
+assert(dadosPrint.itens[0].nome === "MOIDA 2 KG KG", "Nome do item SEFAZ errado")
+assert(dadosPrint.itens[0].quantidade === 0.53, "Quantidade do item SEFAZ errada")
+
 console.log("OK - cupom fiscal validado")
