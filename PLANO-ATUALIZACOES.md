@@ -25,9 +25,9 @@ Objetivo: ler cupom fiscal e puxar os dados oficiais do mercado quando possivel.
 - [parcial] Identificar CNPJ, mercado, data, valor total e itens.
 - [feito] Cadastrar/atualizar estabelecimento pelo CNPJ.
 - [feito] Criar compra em Mercado ou Mercadinho automaticamente.
-- Vincular itens do cupom ao catalogo da despensa.
-- Atualizar preco medio, ultimo preco e ultima compra dos itens.
-- Usar OCR apenas como fallback quando QR Code/SEFAZ falhar.
+- [feito] Vincular itens do cupom ao catalogo da despensa.
+- [feito] Atualizar preco medio, ultimo preco e ultima compra dos itens.
+- [feito] Usar OCR apenas como fallback quando QR Code/SEFAZ falhar.
 - [feito] Detectar cupom duplicado pela chave de acesso.
 - Exigir conferencia rapida antes de salvar quando houver baixa confianca.
 
@@ -35,8 +35,8 @@ Objetivo: ler cupom fiscal e puxar os dados oficiais do mercado quando possivel.
 
 Objetivo: a compra alimentar a despensa sem retrabalho.
 
-- Transformar itens de cupom em itens de catalogo.
-- Somar estoque automaticamente quando uma compra for salva.
+- [feito] Transformar itens de cupom em itens de catalogo.
+- [feito] Somar estoque automaticamente quando uma compra for salva.
 - Permitir corrigir unidade, nome e categoria do item.
 - Aprender equivalencias: "arroz branco 1kg" = "arroz".
 - Calcular consumo medio por item.

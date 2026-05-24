@@ -135,6 +135,8 @@ export interface CompraMercado {
   origem: 'manual' | 'qrcode' | 'voz';
   chaveAcesso?: string | null;
   cnpjEmitente?: string | null;
+  cupomImagem?: string | null;
+  cupomTextoExtraido?: string | null;
   criadoEm: string;
 }
 

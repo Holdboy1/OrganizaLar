@@ -54,6 +54,8 @@ export const storeActions = {
     useAppStore.getState().setEstoque(itemId, quantidade),
   ajustarEstoque: (itemId: string, delta: number) =>
     useAppStore.getState().ajustarEstoque(itemId, delta),
+  importarItensCompraMercado: (...args: Parameters<ReturnType<typeof useAppStore.getState>["importarItensCompraMercado"]>) =>
+    useAppStore.getState().importarItensCompraMercado(...args),
 }
 
 // Pega o snapshot atual do state inteiro - útil quando precisa de várias coisas

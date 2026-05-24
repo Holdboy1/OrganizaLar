@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { AlertCircle, Camera, Check, ExternalLink, Keyboard, QrCode, Square } from "lucide-react"
+import { AlertCircle, Camera, Check, ExternalLink, ImageUp, Keyboard, QrCode, Square } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -28,6 +28,50 @@ interface CupomFiscalModalProps {
 }
 
 type ScannerState = "idle" | "requesting" | "scanning" | "error"
+type OcrState = "idle" | "loading" | "processing" | "done" | "error"
+
+async function carregarTesseract() {
+  if (typeof window === "undefined") throw new Error("OCR indisponivel fora do navegador.")
+  if ((window as any).Tesseract) return (window as any).Tesseract
+
+  await new Promise<void>((resolve, reject) => {
+    const script = document.createElement("script")
+    script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"
+    script.async = true
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error("Nao consegui carregar o OCR local. Verifique a internet e tente de novo."))
+    document.head.appendChild(script)
+  })
+
+  if (!(window as any).Tesseract) throw new Error("OCR local nao inicializou.")
+  return (window as any).Tesseract
+}
+
+async function compactarImagemCupom(file: File): Promise<string> {
+  const url = URL.createObjectURL(file)
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image()
+      image.onload = () => resolve(image)
+      image.onerror = () => reject(new Error("Nao consegui abrir a imagem do cupom."))
+      image.src = url
+    })
+
+    const maxLado = 1200
+    const escala = Math.min(1, maxLado / Math.max(img.width, img.height))
+    const width = Math.max(1, Math.round(img.width * escala))
+    const height = Math.max(1, Math.round(img.height * escala))
+    const canvas = document.createElement("canvas")
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext("2d")
+    if (!ctx) throw new Error("Canvas indisponivel para compactar imagem.")
+    ctx.drawImage(img, 0, 0, width, height)
+    return canvas.toDataURL("image/jpeg", 0.74)
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
 
 export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModalProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -50,6 +94,10 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
   const [obs, setObs] = useState("")
   const [textoOficial, setTextoOficial] = useState("")
   const [itensExtraidos, setItensExtraidos] = useState<ItemCupomParseado[]>([])
+  const [ocrState, setOcrState] = useState<OcrState>("idle")
+  const [ocrProgresso, setOcrProgresso] = useState(0)
+  const [ocrStatus, setOcrStatus] = useState("")
+  const [imagemCupom, setImagemCupom] = useState<string | null>(null)
 
   const estabelecimentoExistente = useMemo(() => {
     if (!cupom?.cnpjEmitente) return null
@@ -76,6 +124,10 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
     setObs("")
     setTextoOficial("")
     setItensExtraidos([])
+    setOcrState("idle")
+    setOcrProgresso(0)
+    setOcrStatus("")
+    setImagemCupom(null)
   }, [open, tipoInicial])
 
   const pararScanner = () => {
@@ -183,6 +235,52 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
     })
   }
 
+  const processarImagemCupom = async (file: File | null) => {
+    if (!file) return
+    setErro("")
+    setOcrState("loading")
+    setOcrProgresso(0)
+    setOcrStatus("Carregando OCR local...")
+
+    try {
+      const imagem = await compactarImagemCupom(file)
+      setImagemCupom(imagem)
+      const Tesseract = await carregarTesseract()
+      setOcrState("processing")
+      const result = await Tesseract.recognize(file, "por", {
+        logger: (m: any) => {
+          const progress = Math.round((m.progress || 0) * 100)
+          setOcrStatus(m.status || "processando")
+          setOcrProgresso(progress)
+        },
+      })
+
+      const texto = String(result?.data?.text || "").trim()
+      if (texto.length < 20) {
+        throw new Error("Nao consegui ler texto suficiente no print. Use uma imagem mais nitida.")
+      }
+
+      setTextoOficial(texto)
+      const dados = parseDadosTextoCupom(texto)
+      if (dados.valorTotal) setValor(String(dados.valorTotal))
+      if (dados.formaPagamento) setFormaPagamento(dados.formaPagamento)
+      setItensExtraidos(dados.itens)
+      setObs(prev => {
+        const base = prev || "Cupom fiscal lido por imagem"
+        if (dados.itens.length === 0) return base
+        return `${base} - ${dados.itens.length} itens extraidos por OCR`
+      })
+      setOcrState("done")
+
+      if (!dados.valorTotal && dados.itens.length === 0) {
+        setErro("Li o print, mas nao encontrei valor nem itens. Tente copiar o texto da pagina oficial ou tirar um print mais aberto.")
+      }
+    } catch (error) {
+      setOcrState("error")
+      setErro(error instanceof Error ? error.message : "OCR falhou ao processar a imagem.")
+    }
+  }
+
   const salvar = () => {
     if (!cupom || duplicado) return
     const valorNumber = Number(String(valor).replace(",", ".")) || 0
@@ -204,7 +302,7 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
       estabelecimentoId = novo.id
     }
 
-    storeActions.addCompraMercado({
+    const compra = storeActions.addCompraMercado({
       tipo,
       estabelecimentoId,
       data,
@@ -215,7 +313,16 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
       origem: "qrcode",
       chaveAcesso: cupom.chaveAcesso,
       cnpjEmitente: cupom.cnpjEmitente,
+      cupomImagem: imagemCupom,
+      cupomTextoExtraido: textoOficial.trim() || null,
     })
+
+    if (itensExtraidos.length > 0) {
+      storeActions.importarItensCompraMercado(
+        compra.id,
+        itensExtraidos.map(item => ({ ...item, origem: textoOficial ? "ocr" : "sefaz" }))
+      )
+    }
 
     onClose()
   }
@@ -376,6 +483,36 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
                 </a>
               </Button>
 
+              <div className="rounded-xl border p-3">
+                <Label htmlFor="print-cupom" className="flex items-center gap-2">
+                  <ImageUp className="h-4 w-4 text-emerald-500" />
+                  Print ou foto da nota
+                </Label>
+                <Input
+                  id="print-cupom"
+                  type="file"
+                  accept="image/*"
+                  className="mt-2"
+                  onChange={e => processarImagemCupom(e.target.files?.[0] || null)}
+                />
+                {ocrState !== "idle" && (
+                  <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full bg-emerald-500 transition-all"
+                        style={{ width: `${ocrProgresso}%` }}
+                      />
+                    </div>
+                    <p>{ocrState === "done" ? "OCR concluido" : `${ocrStatus || "Processando"} ${ocrProgresso}%`}</p>
+                  </div>
+                )}
+                {imagemCupom && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Print compactado e pronto para ficar salvo junto com a compra.
+                  </p>
+                )}
+              </div>
+
               <div>
                 <Label>Texto da consulta oficial</Label>
                 <Textarea
@@ -394,9 +531,17 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
                   Extrair dados do texto
                 </Button>
                 {itensExtraidos.length > 0 && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {itensExtraidos.length} itens encontrados. Na proxima etapa eles vao alimentar a despensa automaticamente.
-                  </p>
+                  <div className="mt-2 rounded-lg bg-muted/50 p-2 text-xs text-muted-foreground">
+                    <p className="font-medium text-foreground">{itensExtraidos.length} itens encontrados para adicionar na despensa.</p>
+                    <ul className="mt-1 max-h-24 space-y-0.5 overflow-y-auto">
+                      {itensExtraidos.slice(0, 6).map((item, index) => (
+                        <li key={`${item.nome}-${index}`}>
+                          {item.quantidade} {item.unidade} - {item.nome} ({formatBRL(item.valorTotal)})
+                        </li>
+                      ))}
+                      {itensExtraidos.length > 6 && <li>+ {itensExtraidos.length - 6} itens</li>}
+                    </ul>
+                  </div>
                 )}
               </div>
             </>

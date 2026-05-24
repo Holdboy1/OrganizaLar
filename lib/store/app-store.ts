@@ -6,6 +6,7 @@ import type {
   AppState, Despesa, Receita, Recorrente, ReceitaRecorrente,
   Cartao, CompraCartao, PagamentoFatura, Categoria,
   Estabelecimento, CompraMercado, ItemCatalogo, FormaPagamento,
+  ItemCompra,
 } from "@/lib/types"
 import { DEFAULT_CATEGORIAS, uid, isoNow, isoToday, normalizarNome } from "@/lib/domain/helpers"
 import { criarCompraMercado } from "@/lib/domain/mercado"
@@ -93,6 +94,14 @@ interface AppStore extends AppState {
   deleteItemCatalogo: (id: string) => void
   setEstoque: (itemId: string, quantidade: number) => void
   ajustarEstoque: (itemId: string, delta: number) => void
+  importarItensCompraMercado: (compraMercadoId: string, itens: Array<{
+    nome: string
+    quantidade: number
+    unidade: string
+    valorUnitario: number
+    valorTotal: number
+    origem?: "sefaz" | "ocr"
+  }>) => void
 
   // Preferências
   setPreferencias: (p: Partial<AppState["preferencias"]>) => void
@@ -376,6 +385,91 @@ export const useAppStore = create<AppStore>()(
         const atual = get().estoque[itemId]?.quantidade || 0
         get().setEstoque(itemId, atual + delta)
       },
+      importarItensCompraMercado: (compraMercadoId, itens) => {
+        const compra = get().comprasMercado.find(c => c.id === compraMercadoId)
+        if (!compra || itens.length === 0) return
+
+        set(s => {
+          const catalogo = [...s.itensCatalogo]
+          const itensCompra = [...s.itensCompra]
+          const estoque = { ...s.estoque }
+          const agora = isoNow()
+
+          for (const item of itens) {
+            if (!item.nome || item.quantidade <= 0 || item.valorTotal <= 0) continue
+
+            const nomeNormalizado = normalizarNome(item.nome)
+            let catalogoItem = catalogo.find(i => i.nomeNormalizado === nomeNormalizado)
+            const valorUnitario = item.valorUnitario || item.valorTotal / item.quantidade
+
+            if (!catalogoItem) {
+              catalogoItem = {
+                id: 'item-' + uid(),
+                nome: item.nome.trim(),
+                nomeNormalizado,
+                ean: null,
+                unidade: item.unidade || "un",
+                qtdEmbalagem: null,
+                categoriaProduto: "outros",
+                tipo: "estocavel",
+                itemBase: false,
+                estoqueMinimo: null,
+                estoqueMaximoHistorico: 0,
+                consumoMedioDiario: 0,
+                consumoConfianca: "nenhuma",
+                ultimoPreco: valorUnitario,
+                precoMedio: valorUnitario,
+                ultimaCompra: compra.data,
+                criadoEm: agora,
+              }
+              catalogo.push(catalogoItem)
+            } else {
+              const comprasAnteriores = s.itensCompra.filter(ic => ic.itemId === catalogoItem!.id)
+              const totalAnterior = comprasAnteriores.reduce((total, ic) => total + ic.valorTotal, 0)
+              const qtdAnterior = comprasAnteriores.reduce((total, ic) => total + ic.quantidade, 0)
+              const novoPrecoMedio = qtdAnterior + item.quantidade > 0
+                ? (totalAnterior + item.valorTotal) / (qtdAnterior + item.quantidade)
+                : valorUnitario
+
+              catalogoItem = {
+                ...catalogoItem,
+                unidade: catalogoItem.unidade || item.unidade || "un",
+                ultimoPreco: valorUnitario,
+                precoMedio: Number(novoPrecoMedio.toFixed(2)),
+                ultimaCompra: compra.data,
+              }
+              const idx = catalogo.findIndex(i => i.id === catalogoItem!.id)
+              if (idx >= 0) catalogo[idx] = catalogoItem
+            }
+
+            const atual = estoque[catalogoItem.id]?.quantidade || 0
+            const novoEstoque = atual + item.quantidade
+            estoque[catalogoItem.id] = { quantidade: novoEstoque, atualizadoEm: agora }
+
+            const idx = catalogo.findIndex(i => i.id === catalogoItem!.id)
+            if (idx >= 0) {
+              catalogo[idx] = {
+                ...catalogo[idx],
+                estoqueMaximoHistorico: Math.max(catalogo[idx].estoqueMaximoHistorico || 0, novoEstoque),
+              }
+            }
+
+            const novoItemCompra: ItemCompra = {
+              id: 'icomp-' + uid(),
+              compraMercadoId,
+              itemId: catalogoItem.id,
+              quantidade: item.quantidade,
+              valorUnitario,
+              valorTotal: item.valorTotal,
+              origem: item.origem || "ocr",
+              criadoEm: agora,
+            }
+            itensCompra.push(novoItemCompra)
+          }
+
+          return { itensCatalogo: catalogo, itensCompra, estoque }
+        })
+      },
 
       // ============ PREFERÊNCIAS ============
       setPreferencias: (p) => {
@@ -470,7 +564,7 @@ export const useAppStore = create<AppStore>()(
           addEstabelecimento, updateEstabelecimento, deleteEstabelecimento,
           addCompraMercado, updateCompraMercado, deleteCompraMercado,
           addItemCatalogo, updateItemCatalogo, deleteItemCatalogo,
-          setEstoque, ajustarEstoque,
+          setEstoque, ajustarEstoque, importarItensCompraMercado,
           setPreferencias, exportarBackup, importarBackup, registrarBackup, resetTudo,
           ...data
         } = state
