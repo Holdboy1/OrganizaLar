@@ -3,8 +3,9 @@
 import { useState, useMemo } from "react"
 import {
   Wallet, CheckCircle, Clock, CreditCard,
-  AlertTriangle, AlertCircle, Calendar,
+  AlertTriangle, AlertCircle, Calendar, ChevronDown,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { StatCard } from "@/components/stat-card"
 import { MonthSelector, ToggleSwitch, AlertBanner } from "@/components/ui-elements"
 import { CategoryProgress, ExpenseItem } from "@/components/category-progress"
@@ -41,6 +42,7 @@ export function Dashboard() {
   const [mes, setMes] = useState(isoMonth(new Date()))
   const [showBackupBanner, setShowBackupBanner] = useState(true)
   const [viewMode, setViewMode] = useState("Consolidada")
+  const [mostrarDetalhes, setMostrarDetalhes] = useState(false)
 
   // Lê fatias específicas (sem subscribe a TODO o store)
   const categorias = useAppStore(s => s.categorias)
@@ -117,13 +119,6 @@ export function Dashboard() {
         onNext={() => setMes(shiftMonth(mes, 1))}
       />
 
-      <ToggleSwitch
-        options={["Consolidada", "Separada"]}
-        value={viewMode}
-        onChange={setViewMode}
-        className="mx-auto max-w-xs"
-      />
-
       <div className="rounded-xl gradient-balance p-5 text-white shadow-card animate-slide-up">
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
@@ -141,7 +136,15 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard title="A Pagar" value={formatBRL(totais.totalPendente)} variant="warning"
+          icon={<Clock className="h-5 w-5 text-warning" />} />
+        <StatCard title="Em Cartao" value={formatBRL(totais.totalCartao)}
+          icon={<CreditCard className="h-5 w-5 text-secondary" />} />
+      </div>
+
+      {mostrarDetalhes && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard title="Total" value={formatBRL(totais.totalDespesas)}
           icon={<Wallet className="h-5 w-5 text-primary" />} />
         <StatCard title="Pagas" value={formatBRL(totais.totalPagas)} variant="success"
@@ -151,6 +154,8 @@ export function Dashboard() {
         <StatCard title="Em Cartão" value={formatBRL(totais.totalCartao)}
           icon={<CreditCard className="h-5 w-5 text-secondary" />} />
       </div>
+
+      )}
 
       {alertas.length > 0 && (
         <div className="space-y-2">
@@ -177,7 +182,21 @@ export function Dashboard() {
         </div>
       )}
 
-      {categoriasComValor.length > 0 && (
+      <Button variant="outline" className="w-full" onClick={() => setMostrarDetalhes(v => !v)}>
+        <ChevronDown className={`mr-2 h-4 w-4 transition-transform ${mostrarDetalhes ? "rotate-180" : ""}`} />
+        {mostrarDetalhes ? "Ocultar detalhes" : "Ver detalhes do mes"}
+      </Button>
+
+      {mostrarDetalhes && (
+        <ToggleSwitch
+          options={["Consolidada", "Separada"]}
+          value={viewMode}
+          onChange={setViewMode}
+          className="mx-auto max-w-xs"
+        />
+      )}
+
+      {mostrarDetalhes && categoriasComValor.length > 0 && (
         <section>
           <h2 className="mb-3 text-lg font-semibold">Por Categoria</h2>
           <div className="space-y-2">
@@ -198,7 +217,7 @@ export function Dashboard() {
         </section>
       )}
 
-      {top5.length > 0 && (
+      {mostrarDetalhes && top5.length > 0 && (
         <section>
           <h2 className="mb-3 text-lg font-semibold">Top 5 Maiores Gastos</h2>
           <div className="space-y-2">
@@ -221,6 +240,7 @@ export function Dashboard() {
         </section>
       )}
 
+      {mostrarDetalhes && (
       <section>
         <h2 className="mb-3 text-lg font-semibold">Visão Anual</h2>
         <div className="rounded-xl border bg-card p-4 shadow-card">
@@ -243,8 +263,9 @@ export function Dashboard() {
           </div>
         </div>
       </section>
+      )}
 
-      {faturasPrevistas.length > 0 && (
+      {mostrarDetalhes && faturasPrevistas.length > 0 && (
         <section>
           <h2 className="mb-3 text-lg font-semibold">Previsão de Fatura</h2>
           <div className="space-y-2">
