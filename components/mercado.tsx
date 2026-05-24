@@ -31,6 +31,7 @@ function MercadoContent({ tipo }: { tipo: TipoMercado }) {
     estabelecimentoIdInicial: string | null
   }>({ open: false, compra: null, estabelecimentoIdInicial: null })
   const [modalCupom, setModalCupom] = useState(false)
+  const [mostrarComparativo, setMostrarComparativo] = useState(false)
 
   // Selectors específicos
   const todasCompras = useAppStore(s => s.comprasMercado)
@@ -50,6 +51,15 @@ function MercadoContent({ tipo }: { tipo: TipoMercado }) {
   )
 
   const total = useMemo(() => compras.reduce((s, c) => s + c.valor, 0), [compras])
+  const comparativoMensal = useMemo(() => {
+    return Array.from({ length: 6 }, (_, index) => {
+      const ref = shiftMonth(mes, index - 5)
+      const totalMes = todasCompras
+        .filter(c => c.tipo === tipo && c.data.startsWith(ref))
+        .reduce((s, c) => s + c.valor, 0)
+      return { ref, total: totalMes }
+    })
+  }, [mes, todasCompras, tipo])
 
   const visitasPorEstab = useMemo(() => {
     const map: Record<string, number> = {}
@@ -128,10 +138,31 @@ function MercadoContent({ tipo }: { tipo: TipoMercado }) {
         </Button>
       </div>
 
-      <Button variant="outline" className="w-full">
+      <Button variant="outline" className="w-full" onClick={() => setMostrarComparativo(v => !v)}>
         <BarChart3 className="mr-2 h-4 w-4" />
-        Ver comparativo mensal
+        {mostrarComparativo ? "Ocultar comparativo mensal" : "Ver comparativo mensal"}
       </Button>
+
+      {mostrarComparativo && (
+        <section className="rounded-xl border bg-card p-4 shadow-card">
+          <h2 className="text-sm font-semibold">Comparativo mensal</h2>
+          <div className="mt-3 space-y-2">
+            {comparativoMensal.map(item => {
+              const maior = Math.max(...comparativoMensal.map(m => m.total), 1)
+              const pct = Math.round((item.total / maior) * 100)
+              return (
+                <div key={item.ref} className="grid grid-cols-[4.5rem_1fr_5rem] items-center gap-2 text-sm">
+                  <span className="capitalize text-muted-foreground">{months[Number(item.ref.slice(5, 7)) - 1]}/{item.ref.slice(2, 4)}</span>
+                  <div className="h-2 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-emerald-500" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-right font-medium tabular-nums">{formatBRL(item.total)}</span>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
       <section>
         <h2 className="mb-3 text-lg font-semibold">Compras Recentes</h2>

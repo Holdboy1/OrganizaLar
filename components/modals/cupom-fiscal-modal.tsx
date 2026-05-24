@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useAppStore } from "@/lib/store/app-store"
 import { storeActions } from "@/lib/store/actions"
 import { formatBRL, isoToday } from "@/lib/domain/helpers"
+import { sugerirIdentidadeEstabelecimento } from "@/lib/domain/mercado"
 import {
   cupomJaImportado,
   formatarCNPJ,
@@ -200,6 +201,11 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
     return estabelecimentos.find(e => e.cnpj === cupom.cnpjEmitente) || null
   }, [cupom, estabelecimentos])
 
+  const identidadeSugerida = useMemo(
+    () => sugerirIdentidadeEstabelecimento(cupom?.cnpjEmitente, nomeEmitente),
+    [cupom?.cnpjEmitente, nomeEmitente]
+  )
+
   const duplicado = cupom ? cupomJaImportado(cupom.chaveAcesso, state) : false
 
   useEffect(() => {
@@ -303,7 +309,9 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
 
     setCupom(parsed)
     const estabelecimento = state.estabelecimentos.find(e => e.cnpj === parsed.cnpjEmitente)
-    setTipo(estabelecimento?.tipo || tipoInicial)
+    const identidade = sugerirIdentidadeEstabelecimento(parsed.cnpjEmitente, null)
+    setTipo(estabelecimento?.tipo || identidade?.tipo || tipoInicial)
+    if (identidade?.nome) setNomeEmitente(identidade.nome)
     setValor(parsed.valorTotal ? String(parsed.valorTotal) : "")
     setData(isoToday())
     setObs(parsed.ehPE ? "Cupom fiscal lido por QR Code - SEFAZ-PE" : "Cupom fiscal lido por QR Code")
@@ -388,15 +396,17 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
 
       setTextoOficial(texto)
       const cupomDoTexto = parseQRCodeNFCe(texto)
+      const dados = parseDadosTextoCupom(texto)
       if (cupomDoTexto && !cupom) {
         setCupom(cupomDoTexto)
         const estabelecimento = state.estabelecimentos.find(e => e.cnpj === cupomDoTexto.cnpjEmitente)
-        setTipo(estabelecimento?.tipo || tipoInicial)
+        const identidade = sugerirIdentidadeEstabelecimento(cupomDoTexto.cnpjEmitente, dados.emitenteNome)
+        setTipo(estabelecimento?.tipo || identidade?.tipo || tipoInicial)
+        if (identidade?.nome) setNomeEmitente(identidade.nome)
         setData(isoToday())
         setObs(cupomDoTexto.ehPE ? "Cupom fiscal lido por print - SEFAZ-PE" : "Cupom fiscal lido por print")
       }
 
-      const dados = parseDadosTextoCupom(texto)
       if (dados.valorTotal) setValor(String(dados.valorTotal))
       if (dados.formaPagamento) setFormaPagamento(dados.formaPagamento)
       if (dados.emitenteNome) setNomeEmitente(dados.emitenteNome)
@@ -463,16 +473,24 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
     }
 
     let estabelecimentoId = estabelecimentoExistente?.id || null
+    const identidade = identidadeSugerida || sugerirIdentidadeEstabelecimento(cupom.cnpjEmitente, nomeEmitente)
     if (!estabelecimentoId) {
       const novo = storeActions.addEstabelecimento({
-        nome: nomeEmitente || `Mercado ${formatarCNPJ(cupom.cnpjEmitente)}`,
-        tipo,
+        nome: identidade?.nome || nomeEmitente || `Mercado ${formatarCNPJ(cupom.cnpjEmitente)}`,
+        tipo: identidade?.tipo || tipo,
         cnpj: cupom.cnpjEmitente,
-        cor: tipo === "mercado" ? "#16a34a" : "#10b981",
+        cor: identidade?.cor || (tipo === "mercado" ? "#16a34a" : "#10b981"),
         icone: tipo === "mercado" ? "🛒" : "🏪",
         ativo: true,
       })
       estabelecimentoId = novo.id
+    } else if (identidade && estabelecimentoExistente && estabelecimentoExistente.nome !== identidade.nome) {
+      storeActions.updateEstabelecimento(estabelecimentoId, {
+        nome: identidade.nome,
+        tipo: identidade.tipo || estabelecimentoExistente.tipo,
+        cor: identidade.cor,
+        icone: identidade.icone,
+      })
     }
 
     const compra = storeActions.addCompraMercado({
@@ -575,6 +593,7 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
               <div className="rounded-xl border bg-muted/40 p-3 text-sm">
                 <p className="font-medium">Cupom fiscal lido</p>
                 <p className="mt-1 text-muted-foreground">Chave: {cupom.chaveAcesso}</p>
+                {identidadeSugerida && <p className="text-muted-foreground">Nome sugerido: {identidadeSugerida.nome}</p>}
                 <p className="text-muted-foreground">CNPJ: {formatarCNPJ(cupom.cnpjEmitente)}</p>
                 <p className="text-muted-foreground">
                   Origem: {cupom.ehPE ? "SEFAZ-PE" : `UF ${cupom.uf}`}

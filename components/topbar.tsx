@@ -10,7 +10,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-export function Topbar() {
+interface TopbarProps {
+  onOpenMore?: () => void
+}
+
+export function Topbar({ onOpenMore }: TopbarProps) {
   const { theme, setTheme } = useTheme()
 
   return (
@@ -47,10 +51,10 @@ export function Topbar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem>Configuracoes</DropdownMenuItem>
-              <DropdownMenuItem>Backup</DropdownMenuItem>
-              <DropdownMenuItem>Exportar dados</DropdownMenuItem>
-              <DropdownMenuItem>Sobre</DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenMore}>Configuracoes</DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenMore}>Backup</DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenMore}>Exportar dados</DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenMore}>Sobre</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

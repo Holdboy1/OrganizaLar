@@ -36,6 +36,8 @@ export const storeActions = {
   // Estabelecimentos
   addEstabelecimento: (...args: Parameters<ReturnType<typeof useAppStore.getState>["addEstabelecimento"]>) =>
     useAppStore.getState().addEstabelecimento(...args),
+  updateEstabelecimento: (...args: Parameters<ReturnType<typeof useAppStore.getState>["updateEstabelecimento"]>) =>
+    useAppStore.getState().updateEstabelecimento(...args),
 
   // Compras Mercado
   addCompraMercado: (...args: Parameters<ReturnType<typeof useAppStore.getState>["addCompraMercado"]>) =>

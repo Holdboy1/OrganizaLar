@@ -51,7 +51,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Topbar />
+      <Topbar onOpenMore={() => handleTabChange("mais")} />
 
       <div className="hidden md:flex justify-center py-4 border-b border-border bg-background sticky top-14 z-30">
         <DesktopTabs activeTab={activeTab} onTabChange={handleTabChange} />

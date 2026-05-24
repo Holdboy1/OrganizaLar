@@ -1,5 +1,6 @@
 "use client"
 
+import { useRef, useState } from "react"
 import {
   CreditCard,
   Settings,
@@ -12,7 +13,8 @@ import {
   Mic,
   ChevronRight,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { useAppStore } from "@/lib/store/app-store"
+import { formatDataBR } from "@/lib/domain/helpers"
 
 interface MenuItemProps {
   icon: React.ReactNode
@@ -52,6 +54,35 @@ interface MaisProps {
 }
 
 export function Mais({ onNavigateToCartoes }: MaisProps) {
+  const [painel, setPainel] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement | null>(null)
+  const state = useAppStore()
+  const exportarBackup = useAppStore(s => s.exportarBackup)
+  const importarBackup = useAppStore(s => s.importarBackup)
+  const registrarBackup = useAppStore(s => s.registrarBackup)
+
+  const baixarBackup = () => {
+    const blob = new Blob([exportarBackup()], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `organizalar-backup-${new Date().toISOString().slice(0, 10)}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+    registrarBackup()
+    setPainel("Backup salvo neste aparelho.")
+  }
+
+  const restaurarBackup = async (file: File | null) => {
+    if (!file) return
+    try {
+      importarBackup(await file.text())
+      setPainel("Backup restaurado com sucesso.")
+    } catch {
+      setPainel("Nao consegui restaurar esse arquivo. Ele nao parece ser um backup valido do OrganizaLar.")
+    }
+  }
+
   return (
     <div className="space-y-6 pb-4 animate-fade-in">
       <h1 className="text-xl font-bold">Mais Opcoes</h1>
@@ -69,13 +100,21 @@ export function Mais({ onNavigateToCartoes }: MaisProps) {
           label="Notificacoes"
           description="Configure lembretes e alertas"
           badge="3"
+          onClick={() => setPainel("Alertas ativos: backup, estoque baixo e gasto fora do normal.")}
         />
         <MenuItem
           icon={<Mic className="h-5 w-5 text-primary" />}
           label="Assistente de Voz"
           description="Adicione despesas por voz"
+          onClick={() => setPainel("Use o botao de microfone no canto inferior para lancar compras, despesas e receitas por voz.")}
         />
       </section>
+
+      {painel && (
+        <section className="rounded-xl border bg-muted/40 p-4 text-sm text-muted-foreground">
+          {painel}
+        </section>
+      )}
 
       {/* Data Section */}
       <section>
@@ -87,11 +126,20 @@ export function Mais({ onNavigateToCartoes }: MaisProps) {
             icon={<Download className="h-5 w-5 text-muted-foreground" />}
             label="Backup"
             description="Salve seus dados na nuvem"
+            onClick={baixarBackup}
           />
           <MenuItem
             icon={<Upload className="h-5 w-5 text-muted-foreground" />}
             label="Restaurar Backup"
             description="Recupere dados salvos"
+            onClick={() => fileRef.current?.click()}
+          />
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={e => restaurarBackup(e.target.files?.[0] || null)}
           />
         </div>
       </section>
@@ -106,11 +154,13 @@ export function Mais({ onNavigateToCartoes }: MaisProps) {
             icon={<Settings className="h-5 w-5 text-muted-foreground" />}
             label="Configuracoes"
             description="Personalize o app"
+            onClick={() => setPainel(`Dados locais: ${state.despesas.length} despesas, ${state.comprasMercado.length} compras de mercado, ${state.itensCatalogo.length} itens na despensa.`)}
           />
           <MenuItem
             icon={<Lock className="h-5 w-5 text-muted-foreground" />}
             label="Seguranca"
             description="PIN e biometria"
+            onClick={() => setPainel("Seguranca local: seus dados ficam no aparelho. PIN/biometria entram como proxima melhoria nativa/PWA.")}
           />
         </div>
       </section>
@@ -125,11 +175,13 @@ export function Mais({ onNavigateToCartoes }: MaisProps) {
             icon={<HelpCircle className="h-5 w-5 text-muted-foreground" />}
             label="Ajuda"
             description="Tutoriais e FAQ"
+            onClick={() => setPainel("Fluxo recomendado: falar pelo microfone, revisar antes de salvar, e usar cupom fiscal para atualizar mercado e despensa.")}
           />
           <MenuItem
             icon={<Info className="h-5 w-5 text-muted-foreground" />}
             label="Sobre"
-            description="Versao 2.0.0"
+            description="Versao 2026.05.24.9"
+            onClick={() => setPainel(`OrganizaLar PWA. Ultimo backup: ${state.ultimoBackup ? formatDataBR(state.ultimoBackup.slice(0, 10)) : "ainda nao registrado"}.`)}
           />
         </div>
       </section>

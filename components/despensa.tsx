@@ -36,6 +36,7 @@ const UNIDADES = ['un', 'kg', 'g', 'l', 'ml', 'dz', 'pct']
 
 export function Despensa() {
   const [busca, setBusca] = useState("")
+  const [filtroRapido, setFiltroRapido] = useState<"todos" | "conferir" | "lista">("todos")
   const [modalItem, setModalItem] = useState<{ open: boolean; item: ItemCatalogo | null }>({ open: false, item: null })
 
   const itens = useAppStore(s => s.itensCatalogo)
@@ -43,12 +44,21 @@ export function Despensa() {
 
   const itensFiltrados = useMemo(() => {
     let lista = itens.filter(i => i.itemBase || (estoque[i.id]?.quantidade || 0) > 0)
+    if (filtroRapido === "conferir") {
+      lista = lista.filter(i => (estoque[i.id]?.quantidade || 0) > 0)
+    }
+    if (filtroRapido === "lista") {
+      lista = lista.filter(i => {
+        const atual = estoque[i.id]?.quantidade || 0
+        return (i.itemBase && atual === 0) || Boolean(i.estoqueMinimo && atual < i.estoqueMinimo)
+      })
+    }
     if (busca) {
       const norm = normalizarNome(busca)
       lista = lista.filter(i => i.nomeNormalizado.includes(norm))
     }
     return lista
-  }, [itens, estoque, busca])
+  }, [itens, estoque, busca, filtroRapido])
 
   const itensAgrupados = useMemo(() => {
     const grupos: Record<string, any[]> = {}
@@ -110,11 +120,19 @@ export function Despensa() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm">
+        <Button
+          variant={filtroRapido === "conferir" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setFiltroRapido(filtroRapido === "conferir" ? "todos" : "conferir")}
+        >
           <Sparkles className="mr-2 h-4 w-4" />
           Conferir
         </Button>
-        <Button variant="outline" size="sm">
+        <Button
+          variant={filtroRapido === "lista" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setFiltroRapido(filtroRapido === "lista" ? "todos" : "lista")}
+        >
           <ShoppingBag className="mr-2 h-4 w-4" />
           Gerar lista
         </Button>
@@ -123,6 +141,14 @@ export function Despensa() {
           Item
         </Button>
       </div>
+
+      {filtroRapido !== "todos" && (
+        <div className="rounded-xl border bg-muted/40 p-3 text-sm text-muted-foreground">
+          {filtroRapido === "conferir"
+            ? "Modo conferencia: mostrando itens que ainda tem estoque para revisar quantidade."
+            : "Lista sugerida: mostrando itens-base zerados e itens abaixo do estoque minimo."}
+        </div>
+      )}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
