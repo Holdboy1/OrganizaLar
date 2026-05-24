@@ -34,6 +34,15 @@ async function carregarTesseract() {
   if (typeof window === "undefined") throw new Error("OCR indisponivel fora do navegador.")
   if ((window as any).Tesseract) return (window as any).Tesseract
 
+  try {
+    const modulo = await import("tesseract.js")
+    const tesseract = (modulo as any).default || modulo
+    if (tesseract?.recognize) {
+      ;(window as any).Tesseract = tesseract
+      return tesseract
+    }
+  } catch {}
+
   await new Promise<void>((resolve, reject) => {
     const script = document.createElement("script")
     script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"
@@ -47,30 +56,75 @@ async function carregarTesseract() {
   return (window as any).Tesseract
 }
 
-async function compactarImagemCupom(file: File): Promise<string> {
+async function carregarImagem(file: File): Promise<HTMLImageElement> {
   const url = URL.createObjectURL(file)
   try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    return await new Promise<HTMLImageElement>((resolve, reject) => {
       const image = new Image()
       image.onload = () => resolve(image)
       image.onerror = () => reject(new Error("Nao consegui abrir a imagem do cupom."))
       image.src = url
     })
-
-    const maxLado = 1200
-    const escala = Math.min(1, maxLado / Math.max(img.width, img.height))
-    const width = Math.max(1, Math.round(img.width * escala))
-    const height = Math.max(1, Math.round(img.height * escala))
-    const canvas = document.createElement("canvas")
-    canvas.width = width
-    canvas.height = height
-    const ctx = canvas.getContext("2d")
-    if (!ctx) throw new Error("Canvas indisponivel para compactar imagem.")
-    ctx.drawImage(img, 0, 0, width, height)
-    return canvas.toDataURL("image/jpeg", 0.74)
   } finally {
     URL.revokeObjectURL(url)
   }
+}
+
+async function compactarImagemCupom(file: File): Promise<string> {
+  const img = await carregarImagem(file)
+  const maxLado = 1200
+  const escala = Math.min(1, maxLado / Math.max(img.width, img.height))
+  const width = Math.max(1, Math.round(img.width * escala))
+  const height = Math.max(1, Math.round(img.height * escala))
+  const canvas = document.createElement("canvas")
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext("2d")
+  if (!ctx) throw new Error("Canvas indisponivel para compactar imagem.")
+  ctx.drawImage(img, 0, 0, width, height)
+  return canvas.toDataURL("image/jpeg", 0.74)
+}
+
+async function prepararImagemChaveCupom(file: File): Promise<string> {
+  const img = await carregarImagem(file)
+  const sourceWidth = img.naturalWidth || img.width
+  const sourceHeight = img.naturalHeight || img.height
+  const cropTop = Math.floor(sourceHeight * 0.82)
+  const cropHeight = Math.max(1, sourceHeight - cropTop)
+  const scale = sourceWidth < 900 ? 3 : 2
+  const canvas = document.createElement("canvas")
+  canvas.width = sourceWidth * scale
+  canvas.height = cropHeight * scale
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })
+  if (!ctx) throw new Error("Canvas indisponivel para preparar a chave.")
+
+  ctx.imageSmoothingEnabled = true
+  ctx.drawImage(img, 0, cropTop, sourceWidth, cropHeight, 0, 0, canvas.width, canvas.height)
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const pixels = imageData.data
+  let min = 255
+  let max = 0
+
+  for (let i = 0; i < pixels.length; i += 4) {
+    const gray = Math.round(pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114)
+    min = Math.min(min, gray)
+    max = Math.max(max, gray)
+    pixels[i] = gray
+    pixels[i + 1] = gray
+    pixels[i + 2] = gray
+  }
+
+  const range = Math.max(1, max - min)
+  for (let i = 0; i < pixels.length; i += 4) {
+    const normalized = Math.max(0, Math.min(255, Math.round(((pixels[i] - min) / range) * 255)))
+    pixels[i] = normalized
+    pixels[i + 1] = normalized
+    pixels[i + 2] = normalized
+  }
+
+  ctx.putImageData(imageData, 0, 0)
+  return canvas.toDataURL("image/png")
 }
 
 export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModalProps) {
@@ -250,15 +304,31 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
       setImagemCupom(imagem)
       const Tesseract = await carregarTesseract()
       setOcrState("processing")
+      setOcrStatus("Lendo dados do cupom...")
       const result = await Tesseract.recognize(file, "por", {
         logger: (m: any) => {
-          const progress = Math.round((m.progress || 0) * 100)
+          const progress = Math.min(70, Math.round((m.progress || 0) * 70))
           setOcrStatus(m.status || "processando")
           setOcrProgresso(progress)
         },
       })
 
-      const texto = String(result?.data?.text || "").trim()
+      const textoGeral = String(result?.data?.text || "").trim()
+      setOcrStatus("Reforcando leitura da chave...")
+      const imagemChave = await prepararImagemChaveCupom(file)
+      const resultChave = await Tesseract.recognize(imagemChave, "eng", {
+        logger: (m: any) => {
+          const progress = 70 + Math.round((m.progress || 0) * 30)
+          setOcrStatus("lendo faixa da chave")
+          setOcrProgresso(Math.min(99, progress))
+        },
+        tessedit_pageseg_mode: "6",
+        tessedit_char_whitelist: "0123456789 ",
+      })
+      setOcrProgresso(100)
+
+      const textoChave = String(resultChave?.data?.text || "").trim()
+      const texto = [textoGeral, textoChave].filter(Boolean).join("\n").trim()
       if (texto.length < 20) {
         throw new Error("Nao consegui ler texto suficiente no print. Use uma imagem mais nitida.")
       }

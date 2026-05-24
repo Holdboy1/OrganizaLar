@@ -156,6 +156,8 @@ function extrairTotalDoTexto(texto: string): number | null {
     /total\s+da\s+nota\s+(?:r\$)?\s*([\d.,]+)/i,
     /valor\s+a\s+pagar\s+(?:r\$)?\s*([\d.,]+)/i,
     /valor\s+a\s+pagar\s*r\$?\s*:?\s*([\d.,]+)/i,
+    /cart[aã]o\s+de\s+cr[eé]dito\s+([\d.,]+)/i,
+    /cart\w*\s+de\s+cr\w*dito\s+([\d.,]+)/i,
     /total\s+(?:r\$)?\s*([\d.,]+)/i,
   ]
 
@@ -288,6 +290,13 @@ function extrairEmitenteDoTexto(texto: string): { nome: string | null; cnpj: str
       }
       break
     }
+  }
+
+  if (!nome) {
+    nome = linhas.find(linha =>
+      /\b(LTDA|EIRELI|S\/A|SA|ME|EPP)\b/i.test(linha) &&
+      !/consulta|filtro|chave|http|codigo|valor|pagamento/i.test(linha)
+    ) || null
   }
 
   return { nome, cnpj }
