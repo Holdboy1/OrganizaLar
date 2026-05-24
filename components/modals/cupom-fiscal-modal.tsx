@@ -261,6 +261,15 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
       }
 
       setTextoOficial(texto)
+      const cupomDoTexto = parseQRCodeNFCe(texto)
+      if (cupomDoTexto && !cupom) {
+        setCupom(cupomDoTexto)
+        const estabelecimento = state.estabelecimentos.find(e => e.cnpj === cupomDoTexto.cnpjEmitente)
+        setTipo(estabelecimento?.tipo || tipoInicial)
+        setData(isoToday())
+        setObs(cupomDoTexto.ehPE ? "Cupom fiscal lido por print - SEFAZ-PE" : "Cupom fiscal lido por print")
+      }
+
       const dados = parseDadosTextoCupom(texto)
       if (dados.valorTotal) setValor(String(dados.valorTotal))
       if (dados.formaPagamento) setFormaPagamento(dados.formaPagamento)
@@ -272,7 +281,9 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
       })
       setOcrState("done")
 
-      if (!dados.valorTotal && dados.itens.length === 0) {
+      if (!cupomDoTexto && !cupom) {
+        setErro("Li o print, mas nao encontrei a chave NFC-e. Tente um print que mostre a chave/QR Code ou cole a chave manualmente.")
+      } else if (!dados.valorTotal && dados.itens.length === 0) {
         setErro("Li o print, mas nao encontrei valor nem itens. Tente copiar o texto da pagina oficial ou tirar um print mais aberto.")
       }
     } catch (error) {
@@ -280,6 +291,41 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
       setErro(error instanceof Error ? error.message : "OCR falhou ao processar a imagem.")
     }
   }
+
+  const renderUploadPrint = () => (
+    <div className="rounded-xl border p-3">
+      <Label htmlFor="print-cupom" className="flex items-center gap-2">
+        <ImageUp className="h-4 w-4 text-emerald-500" />
+        Print ou foto da nota
+      </Label>
+      <Input
+        id="print-cupom"
+        type="file"
+        accept="image/*"
+        className="mt-2"
+        onChange={e => processarImagemCupom(e.target.files?.[0] || null)}
+      />
+      <p className="mt-2 text-xs text-muted-foreground">
+        Use um print da consulta oficial ou uma foto nitida do cupom. O OCR roda localmente no aparelho.
+      </p>
+      {ocrState !== "idle" && (
+        <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full bg-emerald-500 transition-all"
+              style={{ width: `${ocrProgresso}%` }}
+            />
+          </div>
+          <p>{ocrState === "done" ? "OCR concluido" : `${ocrStatus || "Processando"} ${ocrProgresso}%`}</p>
+        </div>
+      )}
+      {imagemCupom && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Print compactado e pronto para ficar salvo junto com a compra.
+        </p>
+      )}
+    </div>
+  )
 
   const salvar = () => {
     if (!cupom || duplicado) return
@@ -392,6 +438,8 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
                   Processar chave
                 </Button>
               </div>
+
+              {renderUploadPrint()}
             </>
           )}
 
@@ -483,35 +531,7 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
                 </a>
               </Button>
 
-              <div className="rounded-xl border p-3">
-                <Label htmlFor="print-cupom" className="flex items-center gap-2">
-                  <ImageUp className="h-4 w-4 text-emerald-500" />
-                  Print ou foto da nota
-                </Label>
-                <Input
-                  id="print-cupom"
-                  type="file"
-                  accept="image/*"
-                  className="mt-2"
-                  onChange={e => processarImagemCupom(e.target.files?.[0] || null)}
-                />
-                {ocrState !== "idle" && (
-                  <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                    <div className="h-2 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full bg-emerald-500 transition-all"
-                        style={{ width: `${ocrProgresso}%` }}
-                      />
-                    </div>
-                    <p>{ocrState === "done" ? "OCR concluido" : `${ocrStatus || "Processando"} ${ocrProgresso}%`}</p>
-                  </div>
-                )}
-                {imagemCupom && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Print compactado e pronto para ficar salvo junto com a compra.
-                  </p>
-                )}
-              </div>
+              {renderUploadPrint()}
 
               <div>
                 <Label>Texto da consulta oficial</Label>
