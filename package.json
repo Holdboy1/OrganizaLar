@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test:cupom": "node scripts/test-cupom-fiscal.mjs",
     "test:voice": "node scripts/test-voice-engine.mjs",
     "lint": "eslint ."
   },

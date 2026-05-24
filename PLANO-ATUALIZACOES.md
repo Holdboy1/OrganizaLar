@@ -20,15 +20,15 @@ Objetivo: falar naturalmente e o sistema jogar no lugar certo.
 
 Objetivo: ler cupom fiscal e puxar os dados oficiais do mercado quando possivel.
 
-- Usar QR Code/chave de acesso como caminho principal.
+- [feito] Usar QR Code/chave de acesso como caminho principal.
 - Consultar NFC-e/SEFAZ-PE quando o cupom permitir.
-- Identificar CNPJ, mercado, data, valor total e itens.
-- Cadastrar/atualizar estabelecimento pelo CNPJ.
-- Criar compra em Mercado ou Mercadinho automaticamente.
+- [parcial] Identificar CNPJ, mercado, data, valor total e itens.
+- [feito] Cadastrar/atualizar estabelecimento pelo CNPJ.
+- [feito] Criar compra em Mercado ou Mercadinho automaticamente.
 - Vincular itens do cupom ao catalogo da despensa.
 - Atualizar preco medio, ultimo preco e ultima compra dos itens.
 - Usar OCR apenas como fallback quando QR Code/SEFAZ falhar.
-- Detectar cupom duplicado pela chave de acesso.
+- [feito] Detectar cupom duplicado pela chave de acesso.
 - Exigir conferencia rapida antes de salvar quando houver baixa confianca.
 
 ## Prioridade 3 - Despensa inteligente

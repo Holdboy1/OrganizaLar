@@ -11,6 +11,7 @@ import { useAppStore } from "@/lib/store/app-store"
 import { storeActions } from "@/lib/store/actions"
 import { isoMonth, shiftMonth, formatBRL, formatDataBR } from "@/lib/domain/helpers"
 import { CompraMercadoModal } from "@/components/modals/compra-mercado-modal"
+import { CupomFiscalModal } from "@/components/modals/cupom-fiscal-modal"
 import type { CompraMercado, TipoMercado } from "@/lib/types"
 
 const months = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
@@ -29,6 +30,7 @@ function MercadoContent({ tipo }: { tipo: TipoMercado }) {
     compra: CompraMercado | null
     estabelecimentoIdInicial: string | null
   }>({ open: false, compra: null, estabelecimentoIdInicial: null })
+  const [modalCupom, setModalCupom] = useState(false)
 
   // Selectors específicos
   const todasCompras = useAppStore(s => s.comprasMercado)
@@ -113,7 +115,7 @@ function MercadoContent({ tipo }: { tipo: TipoMercado }) {
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <Button variant="outline">
+        <Button variant="outline" onClick={() => setModalCupom(true)}>
           <Camera className="mr-2 h-4 w-4" />
           Escanear cupom
         </Button>
@@ -206,6 +208,11 @@ function MercadoContent({ tipo }: { tipo: TipoMercado }) {
         compra={modalCompra.compra}
         estabelecimentoIdInicial={modalCompra.estabelecimentoIdInicial}
         onClose={() => setModalCompra({ open: false, compra: null, estabelecimentoIdInicial: null })}
+      />
+      <CupomFiscalModal
+        open={modalCupom}
+        tipoInicial={tipo}
+        onClose={() => setModalCupom(false)}
       />
     </div>
   )
