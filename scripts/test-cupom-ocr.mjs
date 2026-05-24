@@ -58,22 +58,46 @@ async function prepararFaixaChave(imagePath) {
   return outputPath
 }
 
+async function prepararTextoReforcado(imagePath) {
+  const metadata = await sharp(imagePath).metadata()
+  const width = metadata.width || 1
+  const outputPath = path.join(root, ".tmp-cupom-texto.png")
+
+  await sharp(imagePath)
+    .resize({ width: width < 900 ? width * 2 : Math.round(width * 1.5) })
+    .grayscale()
+    .normalize()
+    .threshold(145)
+    .png()
+    .toFile(outputPath)
+
+  return outputPath
+}
+
 assert(fs.existsSync(screenshotPath), `Print de teste nao encontrado: ${screenshotPath}`)
 
 const { parseQRCodeNFCe, parseDadosTextoCupom } = carregarParser()
 const textoGeral = await reconhecerTexto(screenshotPath, "por")
+const textoReforcadoPath = await prepararTextoReforcado(screenshotPath)
+const textoReforcado = await reconhecerTexto(textoReforcadoPath, "por", {
+  tessedit_pageseg_mode: "6",
+})
 const faixaChave = await prepararFaixaChave(screenshotPath)
 const textoChave = await reconhecerTexto(faixaChave, "eng", {
   tessedit_pageseg_mode: "6",
   tessedit_char_whitelist: "0123456789 ",
 })
-const textoFinal = `${textoGeral}\n${textoChave}`
+const textoFinal = `${textoGeral}\n${textoReforcado}\n${textoChave}`
 const cupom = parseQRCodeNFCe(textoFinal)
 const dados = parseDadosTextoCupom(textoFinal)
 
 assert(cupom?.chaveAcesso === chaveEsperada, "OCR do print real deveria reconhecer a chave NFC-e")
 assert(cupom?.cnpjEmitente === "08071185000137", "OCR do print real deveria extrair CNPJ pela chave")
 assert(dados.emitenteNome === "A.J.J. EMPRESA DE ALIMENTOS LTDA", "OCR do print real deveria reconhecer o emitente")
+assert(dados.valorTotal === 38.51, "OCR do print real deveria reconhecer o total 38,51")
+assert(dados.formaPagamento === "credito", "OCR do print real deveria reconhecer pagamento credito")
+assert(dados.itens.length >= 5, "OCR do print real deveria reconhecer itens basicos")
 
+fs.rmSync(textoReforcadoPath, { force: true })
 fs.rmSync(faixaChave, { force: true })
 console.log("OK - OCR do print real validado")

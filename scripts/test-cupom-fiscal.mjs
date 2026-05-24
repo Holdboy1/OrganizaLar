@@ -109,4 +109,44 @@ assert(dadosPrint.itens.length >= 3, "Itens do layout SEFAZ deveriam ser reconhe
 assert(dadosPrint.itens[0].nome === "MOIDA 2 KG KG", "Nome do item SEFAZ errado")
 assert(dadosPrint.itens[0].quantidade === 0.53, "Quantidade do item SEFAZ errada")
 
+const textoOcrComputador = `
+A.J.J. EMPRESA DE ALIMENTOS LTDA
+es se eLi25 ana,
+aoscumnasES SE STE Toaucou ve
+TETE ve
+EEE =
+Co Mom AMO ma ecoa 16 vo
+Qtde:1 — UN: UNOOOIVI. Unit: 14,65 14,65
+PAO vo
+Qtde:1 — UN: UNOOOIVI. Unit: 1,99 1,99
+Qtde:1 — UN: UNOOOIVI. Unit: 1,99 1,99
+ca ad) vm
+Qtde:1 — UN: UNOOOIVI. Unit: 1,99 1,99
+Qtde:1 — UN: UNOOOIVI. Unit: 1,99 1,99
+Ceu :
+MAE sam
+Comssepagameno Veces
+esc ”
+Se ”
+Came go rm o emo em ão ee seno pe gere en cms
+Qravescscnmo
+ESTE
+BR
+Carto de Crdito 38.51
+Consulte pela Chave de Acesso em hitp://nfce.sefaz pe gov.brinfce-
+Chave de acesso:
+2626 0508 0711 8500 0137 6531 0000 1746 3413 1081 4405
+`
+
+const parsedOcrComputador = parseQRCodeNFCe(textoOcrComputador)
+assert(parsedOcrComputador?.chaveAcesso === chaveRealUsuario, "Chave do OCR do computador deveria ser reconhecida")
+
+const dadosOcrComputador = parseDadosTextoCupom(textoOcrComputador)
+assert(dadosOcrComputador.emitenteNome === "A.J.J. EMPRESA DE ALIMENTOS LTDA", "Emitente do OCR do computador deveria ser reconhecido")
+assert(dadosOcrComputador.valorTotal === 38.51, "Total do OCR do computador deveria ser 38,51")
+assert(dadosOcrComputador.formaPagamento === "credito", "Pagamento do OCR do computador deveria ser credito")
+assert(dadosOcrComputador.itens.length >= 5, "OCR do computador deveria reconhecer os itens com Qtde/Unit")
+assert(dadosOcrComputador.itens.some(item => item.valorTotal === 14.65), "OCR do computador deveria reconhecer item de 14,65")
+assert(dadosOcrComputador.itens.filter(item => item.valorTotal === 1.99).length >= 4, "OCR do computador deveria reconhecer itens de 1,99")
+
 console.log("OK - cupom fiscal validado")

@@ -127,6 +127,47 @@ async function prepararImagemChaveCupom(file: File): Promise<string> {
   return canvas.toDataURL("image/png")
 }
 
+async function prepararImagemTextoCupom(file: File): Promise<string> {
+  const img = await carregarImagem(file)
+  const sourceWidth = img.naturalWidth || img.width
+  const sourceHeight = img.naturalHeight || img.height
+  const scale = sourceWidth < 900 ? 2 : 1.5
+  const canvas = document.createElement("canvas")
+  canvas.width = Math.round(sourceWidth * scale)
+  canvas.height = Math.round(sourceHeight * scale)
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })
+  if (!ctx) throw new Error("Canvas indisponivel para preparar o texto.")
+
+  ctx.imageSmoothingEnabled = true
+  ctx.drawImage(img, 0, 0, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height)
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const pixels = imageData.data
+  let min = 255
+  let max = 0
+
+  for (let i = 0; i < pixels.length; i += 4) {
+    const gray = Math.round(pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114)
+    min = Math.min(min, gray)
+    max = Math.max(max, gray)
+    pixels[i] = gray
+    pixels[i + 1] = gray
+    pixels[i + 2] = gray
+  }
+
+  const range = Math.max(1, max - min)
+  for (let i = 0; i < pixels.length; i += 4) {
+    const normalized = Math.max(0, Math.min(255, Math.round(((pixels[i] - min) / range) * 255)))
+    const threshold = normalized > 145 ? 255 : 0
+    pixels[i] = threshold
+    pixels[i + 1] = threshold
+    pixels[i + 2] = threshold
+  }
+
+  ctx.putImageData(imageData, 0, 0)
+  return canvas.toDataURL("image/png")
+}
+
 export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModalProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -307,13 +348,24 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
       setOcrStatus("Lendo dados do cupom...")
       const result = await Tesseract.recognize(file, "por", {
         logger: (m: any) => {
-          const progress = Math.min(70, Math.round((m.progress || 0) * 70))
+          const progress = Math.min(45, Math.round((m.progress || 0) * 45))
           setOcrStatus(m.status || "processando")
           setOcrProgresso(progress)
         },
       })
 
       const textoGeral = String(result?.data?.text || "").trim()
+      setOcrStatus("Reforcando valor e pagamento...")
+      const imagemTexto = await prepararImagemTextoCupom(file)
+      const resultTexto = await Tesseract.recognize(imagemTexto, "por", {
+        logger: (m: any) => {
+          const progress = 45 + Math.round((m.progress || 0) * 25)
+          setOcrStatus("lendo texto reforcado")
+          setOcrProgresso(Math.min(70, progress))
+        },
+        tessedit_pageseg_mode: "6",
+      })
+
       setOcrStatus("Reforcando leitura da chave...")
       const imagemChave = await prepararImagemChaveCupom(file)
       const resultChave = await Tesseract.recognize(imagemChave, "eng", {
@@ -327,8 +379,9 @@ export function CupomFiscalModal({ open, tipoInicial, onClose }: CupomFiscalModa
       })
       setOcrProgresso(100)
 
+      const textoReforcado = String(resultTexto?.data?.text || "").trim()
       const textoChave = String(resultChave?.data?.text || "").trim()
-      const texto = [textoGeral, textoChave].filter(Boolean).join("\n").trim()
+      const texto = [textoGeral, textoReforcado, textoChave].filter(Boolean).join("\n").trim()
       if (texto.length < 20) {
         throw new Error("Nao consegui ler texto suficiente no print. Use uma imagem mais nitida.")
       }

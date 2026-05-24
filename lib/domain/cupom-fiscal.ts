@@ -126,10 +126,27 @@ export function parseTextoItensCupom(texto: string): ItemCupomParseado[] {
     const proxima = linhas[i + 1] || ""
     const terceira = linhas[i + 2] || ""
 
+    if (/^Qtde\.?\s*:?/i.test(atual)) {
+      const itemSemNome = parseLinhaItemCupom(`Lancamento do cupom ${atual}`)
+      if (itemSemNome) {
+        itens.push(itemSemNome)
+        continue
+      }
+    }
+
     const item = parseLinhaItemCupom(atual)
     if (item) {
       itens.push(item)
       continue
+    }
+
+    if (/^Qtde\.?\s*:?/i.test(proxima)) {
+      const itemDuasLinhas = parseLinhaItemCupom(`${atual} ${proxima}`.trim())
+      if (itemDuasLinhas) {
+        itens.push(itemDuasLinhas)
+        i += 1
+        continue
+      }
     }
 
     const itemTresLinhas = parseLinhaItemCupom(`${atual} ${proxima} ${terceira}`.trim())
@@ -169,6 +186,16 @@ function extrairTotalDoTexto(texto: string): number | null {
         if (valor > 0) return valor
       }
     }
+
+    const normalizada = normalizarTexto(linha)
+    if (/(valor|pagar|cart\w*|credito|crdito|cr\w*dito)/.test(normalizada)) {
+      const valores = linha.match(/\d+(?:[.,]\d{2})/g) || []
+      const ultimoValor = valores.at(-1)
+      if (ultimoValor) {
+        const valor = parseValorBR(ultimoValor)
+        if (valor > 0) return valor
+      }
+    }
   }
 
   return null
@@ -177,8 +204,8 @@ function extrairTotalDoTexto(texto: string): number | null {
 function extrairFormaPagamentoDoTexto(texto: string): FormaPagamento | null {
   const normalizado = normalizarTexto(texto)
   if (/\bpix\b/.test(normalizado)) return "pix"
-  if (/\bcredito|cartao credito|cartao de credito\b/.test(normalizado)) return "credito"
-  if (/\bdebito|cartao debito|cartao de debito\b/.test(normalizado)) return "debito"
+  if (/\bcredito|crdito|cart\w*\s+credito|cart\w*\s+de\s+cr\w*dito|cartao credito|cartao de credito\b/.test(normalizado)) return "credito"
+  if (/\bdebito|dbito|cart\w*\s+debito|cart\w*\s+de\s+d\w*bito|cartao debito|cartao de debito\b/.test(normalizado)) return "debito"
   if (/\bdinheiro|especie\b/.test(normalizado)) return "dinheiro"
   return null
 }
@@ -203,6 +230,16 @@ export function parseLinhaItemCupom(linha: string): ItemCupomParseado | null {
   match = linha.match(/^(.+?)\s+\(C[oó]digo:\s*\d+\).*?Vl\.\s*Total\s*([\d.,]+).*?Qtde\.:\s*(\d+(?:[.,]\d+)?).*?UN:\s*([A-Z]{1,4})\d*.*?Vl\.\s*Unit\.:\s*([\d.,]+)/i)
   if (match) {
     return montarItem(match[1], match[3], match[4], match[5], match[2])
+  }
+
+  match = linha.match(/^([^=]+?)\s+Qtde\.?\s*:?\s*(\d+(?:[.,]\d+)?)\s*[^A-Z0-9]{0,6}\s*UN\s*:\s*([A-Z]{1,4})[A-Z0-9]*.*?Unit\.?\s*:?\s*([\d.,]+)\s+([\d.,]+)\s*$/i)
+  if (match) {
+    return montarItem(match[1], match[2], match[3], match[4], match[5])
+  }
+
+  match = linha.match(/^Qtde\.?\s*:?\s*(\d+(?:[.,]\d+)?)\s*[^A-Z0-9]{0,6}\s*UN\s*:\s*([A-Z]{1,4})[A-Z0-9]*.*?Unit\.?\s*:?\s*([\d.,]+)\s+([\d.,]+)\s*$/i)
+  if (match) {
+    return montarItem("Item do cupom", match[1], match[2], match[3], match[4])
   }
 
   match = linha.match(/^(.+?)\s+(\d+(?:[.,]\d+)?)\s+(UN|KG|G|L|ML|DZ|PCT|CX|PC)\s+R?\$?\s*([\d.,]+)\s*$/i)
