@@ -1,0 +1,6 @@
+{
+  "app": "OrganizaLar",
+  "channel": "pwa",
+  "deployTest": "github-netlify",
+  "version": "2026.05.24.1"
+}
